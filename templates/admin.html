@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Controle - API VDS</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">Painel de Controle API VDS</h1>
+        
+        <!-- Métricas em Tempo Real -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h3 class="text-lg font-semibold mb-2">Total de Requisições</h3>
+                <p class="text-3xl font-bold text-blue-600" id="total-requests">0</p>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h3 class="text-lg font-semibold mb-2">Cache Hits</h3>
+                <p class="text-3xl font-bold text-green-600" id="cache-hits">0</p>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h3 class="text-lg font-semibold mb-2">Cache Misses</h3>
+                <p class="text-3xl font-bold text-red-600" id="cache-misses">0</p>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h3 class="text-lg font-semibold mb-2">Bloqueios Rate Limit</h3>
+                <p class="text-3xl font-bold text-yellow-600" id="rate-limit-blocks">0</p>
+            </div>
+        </div>
+
+        <!-- Gráfico de Cache -->
+        <div class="bg-white p-6 rounded-lg shadow mb-8">
+            <h2 class="text-xl font-semibold mb-4">Taxa de Cache Hit</h2>
+            <canvas id="cacheChart"></canvas>
+        </div>
+
+        <!-- Gerenciamento de Domínios -->
+        <div class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-xl font-semibold mb-4">Gerenciamento de Domínios Permitidos</h2>
+            
+            <!-- Formulário de Adição -->
+            <form id="domainForm" class="mb-6">
+                <div class="flex gap-4">
+                    <input type="text" id="newDomain" placeholder="Novo domínio" 
+                           class="flex-1 p-2 border rounded">
+                    <button type="submit" 
+                            class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                        Adicionar
+                    </button>
+                </div>
+            </form>
+
+            <!-- Lista de Domínios -->
+            <div class="space-y-2">
+                <h3 class="font-semibold mb-2">Domínios Atuais:</h3>
+                <ul id="domainList" class="space-y-2">
+                    {{range .domains}}
+                    <li class="flex justify-between items-center p-2 bg-gray-50 rounded">
+                        <span>{{.}}</span>
+                        <button onclick="deleteDomain('{{.}}')" 
+                                class="text-red-500 hover:text-red-700">
+                            Remover
+                        </button>
+                    </li>
+                    {{end}}
+                </ul>
+            </div>
+        </div>
+
+        <!-- Domínios Pendentes -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <h2 class="text-2xl font-semibold mb-4">Domínios Pendentes de Aprovação</h2>
+            {{if .PendingDomains}}
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Domínio</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requisições</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Primeira Requisição</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Última Requisição</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {{range .PendingDomains}}
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap">{{.Domain}}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">{{.RequestCount}}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">{{.FirstRequest.Format "2006-01-02 15:04:05"}}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">{{.LastRequest.Format "2006-01-02 15:04:05"}}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <button onclick="approveDomain('{{.Domain}}')" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
+                                        Aprovar
+                                    </button>
+                                </td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            {{else}}
+                <p class="text-gray-500">Nenhum domínio pendente de aprovação.</p>
+            {{end}}
+        </div>
+
+        <!-- Domínios Aprovados -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-2xl font-semibold mb-4">Domínios Aprovados</h2>
+            {{if .AllowedHosts}}
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Domínio</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {{range .AllowedHosts}}
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap">{{.}}</td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            {{else}}
+                <p class="text-gray-500">Nenhum domínio aprovado.</p>
+            {{end}}
+        </div>
+    </div>
+
+    <script>
+        // Configuração do gráfico
+        const ctx = document.getElementById('cacheChart').getContext('2d');
+        const cacheChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Cache Hits', 'Cache Misses'],
+                datasets: [{
+                    data: [0, 0],
+                    backgroundColor: ['#10B981', '#EF4444']
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+
+        // Função para atualizar métricas
+        function updateMetrics() {
+            fetch('/admin/metrics', {
+                headers: {
+                    'X-Admin-Token': 'admin-secret-token'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('total-requests').textContent = data.total_requests;
+                document.getElementById('cache-hits').textContent = data.cache_hits;
+                document.getElementById('cache-misses').textContent = data.cache_misses;
+                document.getElementById('rate-limit-blocks').textContent = data.rate_limit_blocks;
+
+                // Atualizar gráfico
+                cacheChart.data.datasets[0].data = [data.cache_hits, data.cache_misses];
+                cacheChart.update();
+            });
+        }
+
+        // Função para adicionar domínio
+        document.getElementById('domainForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const domain = document.getElementById('newDomain').value;
+            
+            fetch('/admin/domains', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Admin-Token': 'admin-secret-token'
+                },
+                body: JSON.stringify({ domain })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message) {
+                    location.reload();
+                }
+            });
+        });
+
+        // Função para remover domínio
+        function deleteDomain(domain) {
+            if (confirm('Tem certeza que deseja remover este domínio?')) {
+                fetch(`/admin/domains/${encodeURIComponent(domain)}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-Admin-Token': 'admin-secret-token'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.message) {
+                        location.reload();
+                    }
+                });
+            }
+        }
+
+        // Função para aprovar domínio
+        async function approveDomain(domain) {
+            try {
+                const response = await fetch(`/admin/domains/approve/${encodeURIComponent(domain)}`, {
+                    method: 'POST',
+                    headers: {
+                        'X-Admin-Token': 'admin-secret-token'
+                    }
+                });
+
+                if (response.ok) {
+                    alert('Domínio aprovado com sucesso!');
+                    window.location.reload();
+                } else {
+                    alert('Erro ao aprovar domínio. Por favor, tente novamente.');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                alert('Erro ao aprovar domínio. Por favor, tente novamente.');
+            }
+        }
+
+        // Atualizar métricas a cada 5 segundos
+        setInterval(updateMetrics, 5000);
+        updateMetrics(); // Atualização inicial
+    </script>
+</body>
+</html> 

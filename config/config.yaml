@@ -1,0 +1,20 @@
+server:
+  port: ":8080"
+  rate_limit: 10000
+  admin_token: "admin-secret-token"
+  allowed_hosts:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+    - "http://127.0.0.1:3000"
+    - "http://127.0.0.1:8080"
+
+redis:
+  host: "redis-13876.c308.sa-east-1-1.ec2.redns.redis-cloud.com"
+  port: 13876
+  username: "default"
+  password: "LmfJm1S4D80brt8wMIciZV9D3AzgWkOQ"
+  db: 0
+
+api:
+  cpf_endpoint: "https://consulta.fontesderenda.blog/cpf.php"
+  token: "6285fe45-e991-4071-a848-3fac8273c82a" 
