@@ -37,14 +37,25 @@ func (c *RedisClient) Get(key string) (string, error) {
 		return "", nil
 	}
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error getting key from Redis: %v", err)
 	}
 	return val, nil
 }
 
 func (c *RedisClient) Set(key string, value string, expiration time.Duration) error {
 	ctx := context.Background()
-	return c.client.Set(ctx, key, value, expiration).Err()
+	if err := c.client.Set(ctx, key, value, expiration).Err(); err != nil {
+		return fmt.Errorf("error setting key in Redis: %v", err)
+	}
+	return nil
+}
+
+func (c *RedisClient) Delete(key string) error {
+	ctx := context.Background()
+	if err := c.client.Del(ctx, key).Err(); err != nil {
+		return fmt.Errorf("error deleting key from Redis: %v", err)
+	}
+	return nil
 }
 
 func (c *RedisClient) Close() error {

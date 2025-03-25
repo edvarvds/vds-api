@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -72,6 +73,7 @@ func (s *Server) setupAdminRoutes() {
 		admin.POST("/domains", s.handleAddDomain)
 		admin.DELETE("/domains/:domain", s.handleDeleteDomain)
 		admin.POST("/domains/approve/:domain", s.handleApproveDomain)
+		admin.POST("/cache/clear", s.handleClearCache)
 	}
 }
 
@@ -156,4 +158,19 @@ func (s *Server) handleApproveDomain(c *gin.Context) {
 	delete(s.metrics.PendingDomains, domain)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Domain approved successfully"})
+}
+
+func (s *Server) handleClearCache(c *gin.Context) {
+	cpf := c.Query("cpf")
+	if cpf == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "CPF parameter is required"})
+		return
+	}
+
+	if err := s.cache.Delete(cpf); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error clearing cache: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Cache cleared successfully"})
 } 

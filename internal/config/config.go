@@ -21,6 +21,10 @@ type Config struct {
 		Username string `yaml:"username"`
 		DB       int    `yaml:"db"`
 	} `yaml:"redis"`
+	API struct {
+		CPFEndpoint string `yaml:"cpf_endpoint"`
+		Token       string `yaml:"token"`
+	} `yaml:"api"`
 }
 
 func LoadConfig(path string) (*Config, error) {
