@@ -7,6 +7,10 @@ server:
     - "http://localhost:8080"
     - "http://127.0.0.1:3000"
     - "http://127.0.0.1:8080"
+  allowed_ips:
+    - "127.0.0.1"
+    - "localhost"
+    - "::1"
 
 redis:
   host: "redis-13876.c308.sa-east-1-1.ec2.redns.redis-cloud.com"

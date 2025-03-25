@@ -55,16 +55,36 @@ func (s *Server) getRateLimiter(ip string) *rate.Limiter {
 }
 
 func (s *Server) setupMiddleware() {
+	// IP validation middleware
+	s.router.Use(func(c *gin.Context) {
+		clientIP := c.ClientIP()
+		if !s.isAllowedIP(clientIP) {
+			s.metrics.IncrementBlockedIPs()
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "IP not allowed",
+				"message": "Your IP is not authorized to access this API.",
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
+	})
+
 	// CORS middleware
 	s.router.Use(func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
+		// Bloquear requisições sem Origin header
 		if origin == "" {
-			c.Next()
+			s.metrics.IncrementBlockedIPs()
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Origin required",
+				"message": "Direct API access is not allowed. Please use a web browser or make requests from an allowed domain.",
+			})
+			c.Abort()
 			return
 		}
 
 		if !s.isAllowedOrigin(origin) {
-			// Registrar domínio pendente
 			s.metrics.AddPendingDomain(origin)
 			c.JSON(http.StatusForbidden, gin.H{
 				"error": "Origin not allowed",
@@ -73,6 +93,11 @@ func (s *Server) setupMiddleware() {
 			c.Abort()
 			return
 		}
+
+		// Adicionar headers CORS
+		c.Header("Access-Control-Allow-Origin", origin)
+		c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
 		c.Next()
 	})
 
@@ -123,6 +148,19 @@ func (s *Server) isAllowedOrigin(origin string) bool {
 
 	for _, allowed := range s.config.Server.AllowedHosts {
 		if strings.EqualFold(origin, allowed) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) isAllowedIP(ip string) bool {
+	if len(s.config.Server.AllowedIPs) == 0 {
+		return false
+	}
+
+	for _, allowed := range s.config.Server.AllowedIPs {
+		if ip == allowed {
 			return true
 		}
 	}

@@ -3,7 +3,9 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
+	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,52 +18,59 @@ type PendingDomain struct {
 }
 
 type Metrics struct {
-	TotalRequests   int64                    `json:"total_requests"`
-	CacheHits       int64                    `json:"cache_hits"`
-	CacheMisses     int64                    `json:"cache_misses"`
-	RateLimitBlocks int64                    `json:"rate_limit_blocks"`
-	PendingDomains  map[string]*PendingDomain `json:"pending_domains"`
+	mu              sync.RWMutex
+	Requests        int64
+	RateLimitBlocks int64
+	BlockedIPs      int64
+	CacheHits       int64
+	CacheMisses     int64
+	PendingDomains  map[string]int64
 }
 
 func NewMetrics() *Metrics {
 	return &Metrics{
-		PendingDomains: make(map[string]*PendingDomain),
+		PendingDomains: make(map[string]int64),
 	}
 }
 
 func (m *Metrics) IncrementRequests() {
-	m.TotalRequests++
-}
-
-func (m *Metrics) IncrementCacheHits() {
-	m.CacheHits++
-}
-
-func (m *Metrics) IncrementCacheMisses() {
-	m.CacheMisses++
+	atomic.AddInt64(&m.Requests, 1)
 }
 
 func (m *Metrics) IncrementRateLimitBlock() {
-	m.RateLimitBlocks++
+	atomic.AddInt64(&m.RateLimitBlocks, 1)
+}
+
+func (m *Metrics) IncrementBlockedIPs() {
+	atomic.AddInt64(&m.BlockedIPs, 1)
+}
+
+func (m *Metrics) IncrementCacheHits() {
+	atomic.AddInt64(&m.CacheHits, 1)
+}
+
+func (m *Metrics) IncrementCacheMisses() {
+	atomic.AddInt64(&m.CacheMisses, 1)
 }
 
 func (m *Metrics) AddPendingDomain(domain string) {
-	if _, exists := m.PendingDomains[domain]; !exists {
-		now := time.Now()
-		m.PendingDomains[domain] = &PendingDomain{
-			Domain:       domain,
-			RequestCount: 1,
-			FirstRequest: now,
-			LastRequest:  now,
-		}
-	} else {
-		m.PendingDomains[domain].RequestCount++
-		m.PendingDomains[domain].LastRequest = time.Now()
-	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.PendingDomains[domain]++
 }
 
-func (m *Metrics) GetMetrics() *Metrics {
-	return m
+func (m *Metrics) GetMetrics() map[string]interface{} {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return map[string]interface{}{
+		"total_requests": atomic.LoadInt64(&m.Requests),
+		"rate_limit_blocks": atomic.LoadInt64(&m.RateLimitBlocks),
+		"blocked_ips": atomic.LoadInt64(&m.BlockedIPs),
+		"cache_hits": atomic.LoadInt64(&m.CacheHits),
+		"cache_misses": atomic.LoadInt64(&m.CacheMisses),
+		"pending_domains": m.PendingDomains,
+	}
 }
 
 func (s *Server) setupAdminRoutes() {

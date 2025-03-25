@@ -13,6 +13,7 @@ type Config struct {
 		RateLimit    int      `yaml:"rate_limit"`
 		AdminToken   string   `yaml:"admin_token"`
 		AllowedHosts []string `yaml:"allowed_hosts"`
+		AllowedIPs   []string `yaml:"allowed_ips"`
 	} `yaml:"server"`
 	Redis struct {
 		Host     string `yaml:"host"`
