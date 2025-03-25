@@ -1,5 +1,5 @@
 server:
-  port: ":8080"
+  port: "8080"
   rate_limit: 10000
   admin_token: "admin-secret-token"
   allowed_hosts:

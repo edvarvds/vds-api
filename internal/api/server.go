@@ -30,15 +30,14 @@ func NewServer(cfg *config.Config, cache *cache.RedisClient) *Server {
 		metrics:     NewMetrics(),
 	}
 
-	// Load templates
+	// Configurar templates HTML
 	server.router.LoadHTMLGlob("templates/*")
 
 	server.setupMiddleware()
 	server.setupRoutes()
-	server.setupAdminRoutes()
 
 	server.httpServer = &http.Server{
-		Addr:    cfg.Server.Port,
+		Addr:    ":" + cfg.Server.Port,
 		Handler: server.router,
 	}
 
@@ -70,45 +69,8 @@ func (s *Server) setupMiddleware() {
 		c.Next()
 	})
 
-	// CORS middleware
+	// Rate limiting middleware
 	s.router.Use(func(c *gin.Context) {
-		origin := c.GetHeader("Origin")
-		// Bloquear requisições sem Origin header
-		if origin == "" {
-			s.metrics.IncrementBlockedIPs()
-			c.JSON(http.StatusForbidden, gin.H{
-				"error": "Origin required",
-				"message": "Direct API access is not allowed. Please use a web browser or make requests from an allowed domain.",
-			})
-			c.Abort()
-			return
-		}
-
-		if !s.isAllowedOrigin(origin) {
-			s.metrics.AddPendingDomain(origin)
-			c.JSON(http.StatusForbidden, gin.H{
-				"error": "Origin not allowed",
-				"message": "Your domain is pending approval. Please contact the administrator.",
-			})
-			c.Abort()
-			return
-		}
-
-		// Adicionar headers CORS
-		c.Header("Access-Control-Allow-Origin", origin)
-		c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-		c.Next()
-	})
-
-	// Rate limiting middleware (apenas para rotas da API)
-	s.router.Use(func(c *gin.Context) {
-		// Não aplicar rate limit para rotas administrativas
-		if strings.HasPrefix(c.Request.URL.Path, "/admin") {
-			c.Next()
-			return
-		}
-
 		ip := c.ClientIP()
 		limiter := s.getRateLimiter(ip)
 		
@@ -121,24 +83,57 @@ func (s *Server) setupMiddleware() {
 		c.Next()
 	})
 
-	// Metrics middleware (apenas para rotas da API)
+	// Metrics middleware
 	s.router.Use(func(c *gin.Context) {
-		// Não contar métricas para rotas administrativas
-		if strings.HasPrefix(c.Request.URL.Path, "/admin") {
-			c.Next()
-			return
-		}
-		
 		s.metrics.IncrementRequests()
 		c.Next()
 	})
 }
 
 func (s *Server) setupRoutes() {
+	// Middleware global
+	s.router.Use(gin.Recovery())
+	s.router.Use(gin.Logger())
+
+	// Rotas da API com CORS
 	api := s.router.Group("/api/v1")
 	{
-		api.GET("/cpf/:cpf", s.handleCPF)
+		// CORS middleware apenas para rotas da API
+		api.Use(func(c *gin.Context) {
+			origin := c.GetHeader("Origin")
+			// Bloquear requisições sem Origin header
+			if origin == "" {
+				s.metrics.IncrementBlockedIPs()
+				c.JSON(http.StatusForbidden, gin.H{
+					"error": "Origin required",
+					"message": "Direct API access is not allowed. Please use a web browser or make requests from an allowed domain.",
+				})
+				c.Abort()
+				return
+			}
+
+			if !s.isAllowedOrigin(origin) {
+				s.metrics.AddPendingDomain(origin)
+				c.JSON(http.StatusForbidden, gin.H{
+					"error": "Origin not allowed",
+					"message": "Your domain is pending approval. Please contact the administrator.",
+				})
+				c.Abort()
+				return
+			}
+
+			// Adicionar headers CORS
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
+			c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
+			c.Next()
+		})
+
+		api.GET("/consulta-cpf/:cpf", s.handleConsultaCPF)
 	}
+
+	// Rotas administrativas
+	s.setupAdminRoutes()
 }
 
 func (s *Server) isAllowedOrigin(origin string) bool {
@@ -165,6 +160,10 @@ func (s *Server) isAllowedIP(ip string) bool {
 		}
 	}
 	return false
+}
+
+func (s *Server) handleConsultaCPF(c *gin.Context) {
+	// ... existing code ...
 }
 
 func (s *Server) Start() error {
